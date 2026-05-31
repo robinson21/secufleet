@@ -331,7 +331,50 @@ body{background:#0f172a;color:#e2e8f0;min-height:100vh}
 
 <script>
 // ==================== CONFIG ====================
-const GAS_URL = 'GAS_URL_PLACEHOLDER';
+const API_URL = 'https://discrete-workers-variable-mia.trycloudflare.com/api';
+const DEMO_MODE = false;
+
+// ==================== DEMO DATA ====================
+const DEMO_USERS = {
+ '12345678-9': { rut:'12345678-9', nombre:'Carlos Muñoz', email:'carlos.munoz@esmax.cl', rol:'conductor', patenteAsignada:'BBCC12', licenciaTipo:'A2', telefono:'+56912345678' },
+ '98765432-1': { rut:'98765432-1', nombre:'María González', email:'maria.gonzalez@esmax.cl', rol:'conductor', patenteAsignada:'DDCC34', licenciaTipo:'A3', telefono:'+56987654321' },
+ '11111111-1': { rut:'11111111-1', nombre:'Admin ESMAX', email:'admin@esmax.cl', rol:'admin', patenteAsignada:'', licenciaTipo:'', telefono:'+56900000000' }
+};
+const DEMO_CLAVES = { '12345678-9':'1234', '98765432-1':'5678', '11111111-1':'admin' };
+const DEMO_VIAJES = [
+ {ID:'V-1001',RUTConductor:'12345678-9',Fecha:'2026-05-29',Hora:'08:00',Origen:'Santiago Centro',Destino:'San Antonio',Vehiculo:'Volvo FH',Patente:'BBCC12',Carga:'Lubricantes',RiesgoScore:35,RiesgoNivel:'Bajo',Distancia:120,Timestamp:'2026-05-29T08:00:00Z'},
+ {ID:'V-1002',RUTConductor:'12345678-9',Fecha:'2026-05-28',Hora:'14:00',Origen:'Maipú',Destino:'Valparaíso',Vehiculo:'Volvo FH',Patente:'BBCC12',Carga:'Combustible',RiesgoScore:72,RiesgoNivel:'Alto',Distancia:85,Timestamp:'2026-05-28T14:00:00Z'},
+ {ID:'V-1003',RUTConductor:'98765432-1',Fecha:'2026-05-29',Hora:'06:30',Origen:'Quilicura',Destino:'Rancagua',Vehiculo:'Scania R450',Patente:'DDCC34',Carga:'Aceites',RiesgoScore:45,RiesgoNivel:'Medio',Distancia:95,Timestamp:'2026-05-29T06:30:00Z'},
+ {ID:'V-1004',RUTConductor:'12345678-9',Fecha:'2026-05-27',Hora:'09:00',Origen:'Las Condes',Destino:'Los Andes',Vehiculo:'Volvo FH',Patente:'BBCC12',Carga:'Grasas',RiesgoScore:28,RiesgoNivel:'Bajo',Distancia:70,Timestamp:'2026-05-27T09:00:00Z'},
+ {ID:'V-1005',RUTConductor:'98765432-1',Fecha:'2026-05-26',Hora:'16:00',Origen:'Puente Alto',Destino:'Melipilla',Vehiculo:'Scania R450',Patente:'DDCC34',Carga:'Aditivos',RiesgoScore:55,RiesgoNivel:'Medio',Distancia:60,Timestamp:'2026-05-26T16:00:00Z'},
+ {ID:'V-1006',RUTConductor:'12345678-9',Fecha:'2026-05-25',Hora:'07:00',Origen:'Santiago',Destino:'Concepción',Vehiculo:'Volvo FH',Patente:'BBCC12',Carga:'Combustible',RiesgoScore:82,RiesgoNivel:'Alto',Distancia:500,Timestamp:'2026-05-25T07:00:00Z'},
+ {ID:'V-1007',RUTConductor:'98765432-1',Fecha:'2026-05-24',Hora:'10:00',Origen:'Vitacura',Destino:'San Fernando',Vehiculo:'Scania R450',Patente:'DDCC34',Carga:'Lubricantes',RiesgoScore:30,RiesgoNivel:'Bajo',Distancia:140,Timestamp:'2026-05-24T10:00:00Z'}
+];
+
+function demoResponse(action, params) {
+ switch(action) {
+  case 'login': {
+   const clave = params.clave || '';
+   const user = DEMO_USERS[params.rut];
+   if (user && DEMO_CLAVES[params.rut] === clave) return {ok:true, user};
+   return {ok:false, error:'RUT o clave incorrectos'};
+  }
+  case 'viajes': {
+   let viajes = [...DEMO_VIAJES];
+   if (params.rol === 'conductor') viajes = viajes.filter(v => v.RUTConductor === params.rut);
+   return {ok:true, viajes, total:viajes.length};
+  }
+  case 'guardar-viaje': return {ok:true, id:'V-'+Date.now()};
+  case 'guardar-checklist': return {ok:true, id:'CL-'+Date.now()};
+  case 'dashboard': {
+   const v = DEMO_VIAJES;
+   return {ok:true, data:{totalViajes:v.length, riesgoPromedio:50, riesgoDist:{Bajo:3,Medio:2,Alto:2}, conductoresActivos:2, distanciaTotal:1070, cargasPorTipo:{Lubricantes:2,Combustible:2,Aceites:1,Grasas:1,Aditivos:1}, vehiculosMasUsados:{'Volvo FH':4,'Scania R450':3}, viajesPorDia:[{fecha:'2026-05-24',cantidad:1},{fecha:'2026-05-25',cantidad:1},{fecha:'2026-05-26',cantidad:1},{fecha:'2026-05-27',cantidad:1},{fecha:'2026-05-28',cantidad:1},{fecha:'2026-05-29',cantidad:2}]}};
+  }
+  case 'perfil': return {ok:true, perfil:DEMO_USERS[params.rut] || null};
+  case 'cambiar-clave': return {ok:true, mensaje:'Clave actualizada (demo)'};
+  default: return {ok:false, error:'Acción no válida'};
+ }
+}
 
 // ==================== GLOBALS ====================
 let map, markerOrigen, markerDestino, routeLine;
@@ -358,17 +401,26 @@ function toast(msg, type='ok') {
 }
 
 // ==================== API CALLS ====================
-async function apiCall(action, params={}, method='GET') {
- let url = `${GAS_URL}?action=${action}`;
- for (const [k,v] of Object.entries(params)) { if (v !== undefined && v !== null) url += `&${encodeURIComponent(k)}=${encodeURIComponent(v)}`; }
- try {
-  if (method === 'POST') {
-   const res = await fetch(url, {method:'POST', headers:{'Content-Type':'text/plain'}, body:JSON.stringify(params), redirect:'follow'});
-   return await res.json();
-  }
-  const res = await fetch(url, {redirect:'follow'});
-  return await res.json();
- } catch(e) { console.error('API error:', e); return {ok:false, error:e.message}; }
+async function apiCall(action, params={}, method='POST') {
+  if (DEMO_MODE) return demoResponse(action, params);
+  const url = `${API_URL}/${action}`;
+  try {
+    const opts = {method, headers:{'Content-Type':'application/json'}};
+    if (method === 'POST') opts.body = JSON.stringify(params);
+    const res = await fetch(url, opts);
+    const data = await res.json();
+    // Normalize response to app format
+    if (action === 'login') {
+      return data.success ? {ok:true, user:data.usuario} : {ok:false, error:data.error};
+    }
+    if (action === 'evaluar') {
+      return data.success ? {ok:true, puntaje:data.puntaje, resultado:data.resultado, cumplidas:data.cumplidas, total:data.total} : {ok:false, error:data.error};
+    }
+    if (action === 'historial' || action === 'dashboard') {
+      return data.success ? {ok:true, data:data} : {ok:false, error:data.error};
+    }
+    return data;
+  } catch(e) { console.error('API error:', e); return {ok:false, error:e.message}; }
 }
 
 // ==================== LOGIN ====================
